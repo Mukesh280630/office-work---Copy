@@ -1320,8 +1320,6 @@
         harvestEl.value = 'HTP' + p2p3Suffix;
     }
 
-    // [REMOVED] handleDateChange function
-
     function clearGeneratedFields() {
         document.getElementById('p2p3').value = '';
         handleP2P3Change({ target: { value: '' } });
@@ -1329,15 +1327,12 @@
     
     document.getElementById('revivalId').addEventListener('input', handleRevivalIdChange);
     document.getElementById('p2p3').addEventListener('input', handleP2P3Change);
-    // [REMOVED] revivalDate event listener
     
 
-    // --- [MODIFIED] GRAPH ---
-    
-    // [MODIFIED] Using Firebase
+    // --- GRAPH ---
     async function populateGraphFilter() {
       const selectEl = document.getElementById('graphMonth');
-      selectEl.innerHTML = '<option value="">-- Select Month --</option>'; // Clear
+      selectEl.innerHTML = '<option value="">-- Select Month --</option>';
       const monthSet = new Set();
       
       try {
@@ -1366,7 +1361,6 @@
       }
     }
     
-    // [MODIFIED] Using Firebase
     async function drawGraph(){
       const ctx=bioChart;
       if (myChart) {
@@ -1587,7 +1581,7 @@
       try {
         const docRef = await db.collection("messages").add(newMessage);
         
-        // Add this message to the sender's "read" list
+        // Also add this message to the sender's "read" list
         const { readIds } = await getReadMessages();
         readIds.push(docRef.id);
         await db.collection("readMessages").doc(currentUser.username).set({ readIds });
@@ -1700,22 +1694,21 @@
     }
 
 
-    // [MODIFIED] Using Firebase - WITH ADD USER FIX
+    // --- USER PANEL (SETTINGS) ---
+    // [MODIFIED] Using Firebase
     async function addUser(){
       const n=newUsername.value.trim(),p=newPassword.value.trim(),r=newRole.value;
       if(!n||!p)return alert("Enter details");
       try {
-        // Check if user already exists
+        // [FIX] Check if user already exists
         const snapshot = await db.collection("users").where("username", "==", n).get();
         if (!snapshot.empty) {
           return alert("❌ This username already exists!");
         }
         
-        // Add the new user to the database
+        // [FIXED] Call loadUsers() AFTER adding
         await db.collection("users").add({ username: n, password: p, role: r });
-        
-        // [FIX] Reload the entire user table from the database
-        await loadUsers(); 
+        loadUsers(); // This reloads the table from the database
         
         newUsername.value=newPassword.value="";
       } catch (e) {

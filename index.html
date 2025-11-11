@@ -1701,22 +1701,22 @@
     }
 
 
-    // --- USER PANEL (SETTINGS) ---
-    // [MODIFIED] Using Firebase
+    // [MODIFIED] Using Firebase - WITH ADD USER FIX
     async function addUser(){
       const n=newUsername.value.trim(),p=newPassword.value.trim(),r=newRole.value;
       if(!n||!p)return alert("Enter details");
       try {
-        // [FIX] Check if user already exists
+        // Check if user already exists
         const snapshot = await db.collection("users").where("username", "==", n).get();
         if (!snapshot.empty) {
           return alert("❌ This username already exists!");
         }
         
-        const docRef = await db.collection("users").add({ username: n, password: p, role: r });
+        // Add the new user to the database
+        await db.collection("users").add({ username: n, password: p, role: r });
         
-        // [FIX] Call loadUsers() to refresh the whole table
-        loadUsers(); 
+        // [FIX] Reload the entire user table from the database
+        await loadUsers(); 
         
         newUsername.value=newPassword.value="";
       } catch (e) {

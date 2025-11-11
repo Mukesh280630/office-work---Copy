@@ -430,8 +430,25 @@
     </main>
   </div>
 
-  <script>
+ <script>
     lucide.createIcons();
+    
+    // --- [NEW] FIREBASE SETUP ---
+    // 1. Paste your Firebase config object here
+   const firebaseConfig = {
+  apiKey: "AIzaSyCkI2phBxL6sQ6Fh7rHaGeWJmM_d6PtEl4",
+  authDomain: "work-file-fae08.firebaseapp.com",
+  projectId: "work-file-fae08",
+  storageBucket: "work-file-fae08.firebasestorage.app",
+  messagingSenderId: "148141344645",
+  appId: "1:148141344645:web:ea99f1273ac306daf866ec"
+};
+
+    // 2. Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore(); // This 'db' is your new database!
+    // --- [END] FIREBASE SETUP ---
+    
     
     let currentUser = null;
     let myChart = null; 
@@ -440,16 +457,35 @@
       if (e.key === "Enter" && !document.getElementById("loginPage").classList.contains("hidden")) login();
     });
 
-    function login() {
+    // [MODIFIED] Using Firebase - WITH LOGIN FIX
+    async function login() {
       const u=username.value.trim(),p=password.value.trim();
-      const users=JSON.parse(localStorage.getItem("users")||"[]");
-      const found=users.find(x=>x.username===u && x.password===p);
-      
       let userObject = null;
-      if (found) {
-        userObject = found;
-      } else if (u === "admin" && p === "12345") {
-        userObject = { username: "admin", role: "Admin" };
+
+      // First, check for the default admin
+      if (u === "admin" && p === "12345") {
+        userObject = { username: "admin", role: "Admin", id: "defaultAdmin" };
+      } else {
+        // Look in the database
+        try {
+          // [FIX] Query by username ONLY
+          const snapshot = await db.collection("users")
+            .where("username", "==", u) 
+            .get();
+            
+          if (!snapshot.empty) {
+            const userDoc = snapshot.docs[0];
+            const userData = userDoc.data();
+            
+            // [FIX] Check password in JavaScript
+            if (userData.password === p) {
+              userObject = userData;
+              userObject.id = userDoc.id;
+            }
+          }
+        } catch (e) {
+          console.error("Error logging in: ", e);
+        }
       }
 
       if(userObject){
@@ -486,8 +522,8 @@
       document.getElementById('messageCountBadge').classList.add('hidden');
     }
 
-    // [NEW] Permission logic
-    function getPermissions() {
+    // [MODIFIED] Using Firebase for permissions
+    async function getPermissions() {
       const defaultPerms = {
         "Operator": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": false, "message": true, "userPanel": false },
         "Supervisor": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": true, "message": true, "userPanel": false },
@@ -495,31 +531,48 @@
         "Manager": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": true, "message": true, "userPanel": true },
         "Admin": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": true, "message": true, "userPanel": true }
       };
-      const perms = JSON.parse(localStorage.getItem("appPermissions") || "null");
-      if (perms) {
-        return { 
-          ...defaultPerms, 
-          "Operator": { ...defaultPerms.Operator, ...perms.Operator },
-          "Supervisor": { ...defaultPerms.Supervisor, ...perms.Supervisor },
-          "SME": { ...defaultPerms.SME, ...perms.SME },
-          "Manager": { ...defaultPerms.Manager, ...perms.Manager },
-          "Admin": { ...defaultPerms.Admin, ...perms.Admin }
-        };
+      
+      try {
+        const doc = await db.collection("settings").doc("appPermissions").get();
+        if (doc.exists) {
+          const perms = doc.data();
+          // Ensure new roles/perms are added if missing from storage
+          return { 
+            ...defaultPerms, 
+            "Operator": { ...defaultPerms.Operator, ...perms.Operator },
+            "Supervisor": { ...defaultPerms.Supervisor, ...perms.Supervisor },
+            "SME": { ...defaultPerms.SME, ...perms.SME },
+            "Manager": { ...defaultPerms.Manager, ...perms.Manager },
+            "Admin": { ...defaultPerms.Admin, ...perms.Admin }
+          };
+        } else {
+          // No permissions saved yet, save the defaults
+          await db.collection("settings").doc("appPermissions").set(defaultPerms);
+          return defaultPerms;
+        }
+      } catch (e) {
+        console.error("Error getting permissions:", e);
+        return defaultPerms;
       }
-      localStorage.setItem("appPermissions", JSON.stringify(defaultPerms));
-      return defaultPerms;
     }
 
-    function savePermission(role, page, isAllowed) {
-      const perms = getPermissions();
+    // [MODIFIED] Using Firebase
+    async function savePermission(role, page, isAllowed) {
+      const perms = await getPermissions();
       if (perms[role]) {
         perms[role][page] = isAllowed;
       }
-      localStorage.setItem("appPermissions", JSON.stringify(perms));
+      // Save all permissions back to the single document
+      try {
+        await db.collection("settings").doc("appPermissions").set(perms);
+      } catch (e) {
+        console.error("Error saving permission:", e);
+      }
     }
 
-    function loadPermissions() {
-      const perms = getPermissions();
+    // [MODIFIED] Using Firebase
+    async function loadPermissions() {
+      const perms = await getPermissions();
       const tableBody = document.getElementById('permissionsTableBody');
       tableBody.innerHTML = "";
       
@@ -543,7 +596,8 @@
       });
     }
     
-    function setupUIForRole() {
+    // [MODIFIED] Using Firebase
+    async function setupUIForRole() {
       if (!currentUser) return;
       
       const sendMessageContainer = document.getElementById('sendMessageContainer');
@@ -560,7 +614,7 @@
         dangerZone.classList.add('hidden');
       }
 
-      const perms = getPermissions()[currentUser.role];
+      const perms = (await getPermissions())[currentUser.role];
       if (!perms) {
         logout();
         return;
@@ -586,9 +640,10 @@
       document.getElementById('userPanelBtn').style.display = perms.userPanel ? 'block' : 'none';
     }
 
-    function showTab(id){
+    // [MODIFIED] Using Firebase
+    async function showTab(id){
       if (currentUser && currentUser.role !== 'Admin') {
-        const perms = getPermissions()[currentUser.role];
+        const perms = (await getPermissions())[currentUser.role];
         if (id === 'activity' && !perms.culture) return;
         if (id === 'culture' && !perms.harvest) return;
         if (id === 'bio' && !perms.bio) return;
@@ -607,7 +662,7 @@
         loadPermissions(); 
       }
       if(id==="dashboard")loadDashboardActivity();
-      if(id==="graph") populateGraphFilter(); // [MODIFIED]
+      if(id==="graph") populateGraphFilter();
       if(id==="report") populateReportFilter();
       if(id==="message") {
         loadMessages();
@@ -752,24 +807,30 @@
     
     enableUppercase();
 
-    function saveData(){
+    // [MODIFIED] Using Firebase
+    async function saveData(){
       const rows=[...document.querySelectorAll("#cultureTable tr")];
-      const harvestReport = [];
-      const bioMassPayload = [];
+      let bioMassPayload = [];
+      let batch = db.batch(); // Create a batch write
+      
+      let dataToSave = false;
       
       rows.forEach(r => {
         const x = r.querySelectorAll("input");
         const suspension = x[0]?.value.toUpperCase();
         if (!suspension) return; 
 
+        dataToSave = true;
         const cakeWeight = parseFloat(x[3].value) || 0;
         
+        // 1. Data for Bio Mass (will be saved at the end)
         bioMassPayload.push({ 
           suspension: suspension, 
           cakeWeight: cakeWeight
         });
         
-        harvestReport.push({
+        // 2. Data for Report
+        const reportData = {
           suspension: suspension,
           A: x[1]?.value,
           B: x[2]?.value,
@@ -778,32 +839,59 @@
           signDate: x[5]?.value,
           startTime: x[6]?.value,
           endTime: x[7]?.value,
-          min: x[8]?.value
-        });
+          min: x[8]?.value,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp() // For sorting
+        };
+        // Add a new document to the "harvestReport" collection
+        const docRef = db.collection("harvestReport").doc();
+        batch.set(docRef, reportData);
       });
       
-      if (harvestReport.length === 0) {
+      if (!dataToSave) {
         return alert("No data to save.");
       }
 
-      const allReports = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
-      const updatedReports = allReports.concat(harvestReport);
-      localStorage.setItem("harvestReportData", JSON.stringify(updatedReports));
-
-      localStorage.setItem("bioMassData", JSON.stringify(bioMassPayload));
-      
-      alert("✅ Data saved and sent to Bio Mass & Report.");
-      loadBioData(); 
-      
-      cultureTable.innerHTML = "";
-      addRow(); 
+      try {
+        // 3. Save Bio Mass data to a single document
+        // This overwrites the old bio mass data, which is correct
+        await db.collection("settings").doc("bioMassData").set({ data: bioMassPayload });
+        
+        // 4. Save the batch of harvest reports
+        await batch.commit();
+        
+        alert("✅ Data saved and sent to Bio Mass & Report.");
+        loadBioData(); 
+        
+        cultureTable.innerHTML = "";
+        addRow(); 
+      } catch (e) {
+        console.error("Error saving data: ", e);
+        alert("Error saving data. See console for details.");
+      }
     }
 
     // --- BIO MASS FUNCTIONS ---
-    function loadBioData(){
+    // [MODIFIED] Using Firebase
+    async function loadBioData(){
       const t=bioTable; t.innerHTML="";
-      const d=JSON.parse(localStorage.getItem("bioMassData")||"[]");
-      const savedMean = localStorage.getItem("bioMassMean") || "16.06"; 
+      let d = [];
+      
+      try {
+        const doc = await db.collection("settings").doc("bioMassData").get();
+        if (doc.exists) {
+          d = doc.data().data; // Get the array from the 'data' field
+        }
+      } catch(e) { console.error("Error loading bio mass: ", e); }
+
+      // Get mean from a separate doc
+      let savedMean = "16.06";
+      try {
+        const meanDoc = await db.collection("settings").doc("bioMassMean").get();
+        if (meanDoc.exists) {
+          savedMean = meanDoc.data().value;
+        }
+      } catch(e) { console.error("Error loading mean: ", e); }
+
 
       if (d.length === 0) {
         t.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500">No data. Add data from Harvest Details.</td></tr>`;
@@ -843,8 +931,16 @@
       });
     }
 
-    function updateMirroredMeans(value) {
-      localStorage.setItem("bioMassMean", value);
+    // [MODIFIED] Using Firebase
+    async function updateMirroredMeans(value) {
+      // 1. Save the value to Firestore
+      try {
+        await db.collection("settings").doc("bioMassMean").set({ value: value });
+      } catch(e) {
+        console.error("Error saving mean: ", e);
+      }
+      
+      // 2. Update all mirrored-mean spans
       document.querySelectorAll(".mirrored-mean").forEach(span => {
         span.textContent = value;
       });
@@ -852,42 +948,56 @@
     
     // --- REPORT TAB FUNCTIONS ---
     
-    function populateReportFilter() {
-      const allData = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+    // [MODIFIED] Using Firebase
+    async function populateReportFilter() {
       const selectEl = document.getElementById('reportMonth');
-      
+      selectEl.innerHTML = '<option value="">-- Select Month --</option>'; // Clear
       const monthSet = new Set();
-      allData.forEach(b => {
-        if (!b.signDate) return;
-        try {
-          const datePartStr = b.signDate.split('&')[1]?.trim();
-          const [day, month, year] = datePartStr.split('/');
-          const recordMonth = `${year}-${month.padStart(2, '0')}`;
-          monthSet.add(recordMonth);
-        } catch (e) { /* ignore */ }
-      });
-      
-      selectEl.innerHTML = '<option value="">-- Select Month --</option>';
-      
-      Array.from(monthSet).sort().reverse().forEach(monthYear => {
-        const [year, month] = monthYear.split('-');
-        const dateObj = new Date(year, month - 1);
-        const monthName = dateObj.toLocaleString('default', { month: 'long' });
-        const label = `${monthName} ${year}`;
+
+      try {
+        const snapshot = await db.collection("harvestReport").get();
+        snapshot.forEach(doc => {
+          const b = doc.data();
+          if (!b.signDate) return;
+          try {
+            const datePartStr = b.signDate.split('&')[1]?.trim();
+            const [day, month, year] = datePartStr.split('/');
+            const recordMonth = `${year}-${month.padStart(2, '0')}`;
+            monthSet.add(recordMonth);
+          } catch (e) { /* ignore */ }
+        });
         
-        const option = new Option(label, monthYear);
-        selectEl.add(option);
-      });
+        Array.from(monthSet).sort().reverse().forEach(monthYear => {
+          const [year, month] = monthYear.split('-');
+          const dateObj = new Date(year, month - 1);
+          const monthName = dateObj.toLocaleString('default', { month: 'long' });
+          const label = `${monthName} ${year}`;
+          const option = new Option(label, monthYear);
+          selectEl.add(option);
+        });
+      } catch(e) {
+        console.error("Error populating report filter: ", e);
+      }
     }
 
-    function getFilteredReportData() {
+    // [MODIFIED] Using Firebase
+    async function getFilteredReportData() {
       const selectedMonth = document.getElementById('reportMonth').value;
       if (!selectedMonth) {
         alert("Please select a month to filter.");
         return null;
       }
       
-      const allData = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+      const allData = [];
+      try {
+        const snapshot = await db.collection("harvestReport").get();
+        snapshot.forEach(doc => {
+          allData.push(doc.data());
+        });
+      } catch(e) {
+        console.error("Error getting report data: ", e);
+        return null;
+      }
       
       const filteredData = allData.filter(b => {
         if (!b.signDate) return false;
@@ -904,9 +1014,10 @@
       return filteredData;
     }
     
-    function loadReportData() {
+    // [MODIFIED] Using Firebase
+    async function loadReportData() {
       const t = document.getElementById('reportTableBody');
-      const data = getFilteredReportData();
+      const data = await getFilteredReportData();
       
       if (data === null) return;
       t.innerHTML = ""; 
@@ -934,14 +1045,21 @@
       });
     }
     
-    function loadBioMassReportData() {
+    // [MODIFIED] Using Firebase
+    async function loadBioMassReportData() {
       const t = document.getElementById('reportBioMassTableBody');
-      const data = getFilteredReportData();
+      const data = await getFilteredReportData();
       
       if (data === null) return;
       t.innerHTML = "";
       
-      const savedMean = localStorage.getItem("bioMassMean") || "16.06"; 
+      let savedMean = "16.06";
+      try {
+        const meanDoc = await db.collection("settings").doc("bioMassMean").get();
+        if (meanDoc.exists) {
+          savedMean = meanDoc.data().value;
+        }
+      } catch(e) { console.error("Error loading mean: ", e); }
 
       if (data.length === 0) {
         t.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500">No bio mass data found for this month.</td></tr>`;
@@ -999,38 +1117,47 @@
 
 
     // --- DASHBOARD OVERVIEW FUNCTIONS ---
-    function saveBatch() {
+    // [MODIFIED] Using Firebase
+    async function saveBatch() {
       const batchData = {
         date: document.getElementById('revivalDate').value,
         revival: document.getElementById('revivalId').value.toUpperCase(),
         p2p3: document.getElementById('p2p3').value.toUpperCase(),
         p2s1: document.getElementById('p2s1').value.toUpperCase(),
         p2s2: document.getElementById('p2s2').value.toUpperCase(),
-        harvest: document.getElementById('harvest').value.toUpperCase()
+        harvest: document.getElementById('harvest').value.toUpperCase(),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp() // For sorting
       };
 
       if (!batchData.date || !batchData.revival) {
         return alert("❌ Please enter at least a Revival Date and Revival ID.");
       }
       
-      const allBatches = JSON.parse(localStorage.getItem("batchActivityData") || "[]");
-      allBatches.push(batchData);
-      localStorage.setItem("batchActivityData", JSON.stringify(allBatches));
-
-      alert("✅ Batch saved successfully!");
-
-      document.getElementById('revivalDate').value = '';
-      document.getElementById('revivalId').value = '';
-      handleRevivalIdChange({ target: { value: '' } }); 
-
-      loadDashboardActivity();
+      try {
+        await db.collection("batchActivity").add(batchData);
+        alert("✅ Batch saved successfully!");
+        document.getElementById('revivalDate').value = '';
+        document.getElementById('revivalId').value = '';
+        handleRevivalIdChange({ target: { value: '' } }); 
+        loadDashboardActivity();
+      } catch (e) {
+        console.error("Error saving batch: ", e);
+      }
     }
 
-    function loadDashboardActivity() {
+    // [MODIFIED] Using Firebase
+    async function loadDashboardActivity() {
       const t = document.getElementById('dashboardActivityTable');
       if (!t) return; 
       t.innerHTML = "";
-      const data = JSON.parse(localStorage.getItem("batchActivityData") || "[]");
+      
+      let data = [];
+      try {
+        const snapshot = await db.collection("batchActivity").orderBy("timestamp", "desc").get();
+        snapshot.forEach(doc => {
+          data.push(doc.data());
+        });
+      } catch(e) { console.error("Error loading dashboard data: ", e); }
 
       if (data.length === 0) {
         t.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-gray-500">No batch activity saved yet.</td></tr>`;
@@ -1115,49 +1242,61 @@
 
     // --- [MODIFIED] GRAPH ---
     
-    // [NEW] Populates the graph month filter dropdown
-    function populateGraphFilter() {
-      const allData = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+    // [MODIFIED] Using Firebase
+    async function populateGraphFilter() {
       const selectEl = document.getElementById('graphMonth');
-      
+      selectEl.innerHTML = '<option value="">-- Select Month --</option>'; // Clear
       const monthSet = new Set();
-      allData.forEach(b => {
-        if (!b.signDate) return;
-        try {
-          const datePartStr = b.signDate.split('&')[1]?.trim();
-          const [day, month, year] = datePartStr.split('/');
-          const recordMonth = `${year}-${month.padStart(2, '0')}`;
-          monthSet.add(recordMonth);
-        } catch (e) { /* ignore */ }
-      });
       
-      selectEl.innerHTML = '<option value="">-- Select Month --</option>';
-      
-      Array.from(monthSet).sort().reverse().forEach(monthYear => {
-        const [year, month] = monthYear.split('-');
-        const dateObj = new Date(year, month - 1);
-        const monthName = dateObj.toLocaleString('default', { month: 'long' });
-        const label = `${monthName} ${year}`;
+      try {
+        const snapshot = await db.collection("harvestReport").get();
+        snapshot.forEach(doc => {
+          const b = doc.data();
+          if (!b.signDate) return;
+          try {
+            const datePartStr = b.signDate.split('&')[1]?.trim();
+            const [day, month, year] = datePartStr.split('/');
+            const recordMonth = `${year}-${month.padStart(2, '0')}`;
+            monthSet.add(recordMonth);
+          } catch (e) { /* ignore */ }
+        });
         
-        const option = new Option(label, monthYear);
-        selectEl.add(option);
-      });
+        Array.from(monthSet).sort().reverse().forEach(monthYear => {
+          const [year, month] = monthYear.split('-');
+          const dateObj = new Date(year, month - 1);
+          const monthName = dateObj.toLocaleString('default', { month: 'long' });
+          const label = `${monthName} ${year}`;
+          const option = new Option(label, monthYear);
+          selectEl.add(option);
+        });
+      } catch(e) {
+        console.error("Error populating graph filter: ", e);
+      }
     }
     
-    function drawGraph(){
+    // [MODIFIED] Using Firebase
+    async function drawGraph(){
       const ctx=bioChart;
       if (myChart) {
         myChart.destroy();
       }
       
-      // [NEW] Filter data based on selected month
       const selectedMonth = document.getElementById('graphMonth').value;
       if (!selectedMonth) {
         alert("Please select a month to view the graph.");
         return;
       }
       
-      const allData = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+      const allData = [];
+      try {
+        const snapshot = await db.collection("harvestReport").get();
+        snapshot.forEach(doc => {
+          allData.push(doc.data());
+        });
+      } catch(e) {
+        console.error("Error getting report data: ", e);
+      }
+      
       const filteredData = allData.filter(b => {
         if (!b.signDate) return false;
         try {
@@ -1176,16 +1315,21 @@
         return;
       }
       
-      // [NEW] Set print title
       const selectEl = document.getElementById('graphMonth');
       const selectedMonthText = selectEl.options[selectEl.selectedIndex].text;
       document.getElementById('graphPrintTitle').textContent = `Bio Mass Trend - ${selectedMonthText}`;
 
-      const savedMean = parseFloat(localStorage.getItem("bioMassMean") || "16.06"); 
+      let savedMean = "16.06";
+      try {
+        const meanDoc = await db.collection("settings").doc("bioMassMean").get();
+        if (meanDoc.exists) {
+          savedMean = meanDoc.data().value;
+        }
+      } catch(e) { console.error("Error loading mean: ", e); }
       
       const lbl=filteredData.map(x=>x.suspension),
             cw=filteredData.map(x=>x.cakeWeight),
-            m=Array(filteredData.length).fill(savedMean), 
+            m=Array(filteredData.length).fill(parseFloat(savedMean)), 
             low=Array(filteredData.length).fill(12),
             high=Array(filteredData.length).fill(18);
             
@@ -1195,7 +1339,7 @@
         scales:{
           y:{
             beginAtZero:true,
-            title: { // [NEW] Y-Axis label
+            title: {
               display: true,
               text: 'Cake Weight',
               font: { size: 16 }
@@ -1206,7 +1350,6 @@
     }
     
     function printGraph() {
-      // Add print-area class to header and graph wrapper
       document.querySelectorAll('.print-area').forEach(el => el.classList.remove('print-area'));
       document.getElementById('mainHeader').classList.add('print-area');
       document.getElementById('graph').classList.add('print-area');
@@ -1217,23 +1360,21 @@
       const { jsPDF } = window.jspdf;
       const graphSection = document.getElementById("graph");
       
-      // [NEW] Temporarily show/hide elements for PDF capture
       const header = document.getElementById('mainHeader');
       const graphTitle = document.getElementById('graphPrintTitle');
       const filterContainer = graphSection.querySelector('.filter-container');
       const buttonContainer = graphSection.querySelector('.button-container');
 
       // 1. Prepare for capture
-      header.classList.add('print-area'); // Show header
-      graphTitle.classList.remove('hidden'); // Show print title
-      filterContainer.classList.add('hidden'); // Hide filter
-      buttonContainer.classList.add('hidden'); // Hide buttons
-      graphSection.classList.add('border-2', 'border-black', 'p-5'); // Add border
+      header.classList.add('print-area'); 
+      graphTitle.classList.remove('hidden'); 
+      filterContainer.classList.add('hidden'); 
+      buttonContainer.classList.add('hidden'); 
+      graphSection.classList.add('border-2', 'border-black', 'p-5'); 
       
       // 2. Capture canvas
       const canvas = await html2canvas(graphSection, { 
         onclone: (doc) => {
-          // Ensure the print-only title is visible in the clone
           const cloneTitle = doc.getElementById('graphPrintTitle');
           if (cloneTitle) {
             cloneTitle.style.display = 'block';
@@ -1258,22 +1399,32 @@
       pdf.save("graph-report.pdf");
     }
     
-    // --- MESSAGE FUNCTIONS ---
+    // --- [MODIFIED] MESSAGE FUNCTIONS ---
     
-    function getReadMessages() {
-      const readDb = JSON.parse(localStorage.getItem("readMessages") || "{}");
+    // [MODIFIED] Using Firebase
+    async function getReadMessages() {
       if (!currentUser) return {};
-      if (!readDb[currentUser.username]) {
-        readDb[currentUser.username] = [];
-      }
-      return readDb;
+      try {
+        const doc = await db.collection("readMessages").doc(currentUser.username).get();
+        if (doc.exists) {
+          return doc.data(); // e.g., { readIds: [...] }
+        }
+      } catch(e) { console.error("Error getting read messages:", e); }
+      return { readIds: [] }; // Default
     }
     
-    function updateMessageCount() {
+    // [MODIFIED] Using Firebase
+    async function updateMessageCount() {
       if (!currentUser) return;
-      const allMessages = JSON.parse(localStorage.getItem("messages") || "[]");
-      const readDb = getReadMessages();
-      const readIds = readDb[currentUser.username] || [];
+      let allMessages = [];
+      try {
+        const snapshot = await db.collection("messages").get();
+        snapshot.forEach(doc => {
+          allMessages.push({ id: doc.id, ...doc.data() });
+        });
+      } catch(e) { console.error("Error getting messages:", e); }
+
+      const { readIds } = await getReadMessages();
       
       let newMessagesCount = 0;
       allMessages.forEach(msg => {
@@ -1291,52 +1442,74 @@
       }
     }
     
-    function markMessagesAsRead() {
+    // [MODIFIED] Using Firebase
+    async function markMessagesAsRead() {
       if (!currentUser) return;
-      const allMessages = JSON.parse(localStorage.getItem("messages") || "[]");
-      const readDb = getReadMessages();
-      
-      readDb[currentUser.username] = allMessages.map(msg => msg.id);
-      localStorage.setItem("readMessages", JSON.stringify(readDb));
-      
-      updateMessageCount();
+      let allMessageIds = [];
+      try {
+        const snapshot = await db.collection("messages").get();
+        snapshot.forEach(doc => {
+          allMessageIds.push(doc.id);
+        });
+        
+        await db.collection("readMessages").doc(currentUser.username).set({
+          readIds: allMessageIds
+        });
+        
+        updateMessageCount(); // Update the badge (which will now be 0)
+      } catch(e) {
+        console.error("Error marking messages as read:", e);
+      }
     }
 
-    function sendMessage() {
+    // [MODIFIED] Using Firebase
+    async function sendMessage() {
       const msgText = document.getElementById('messageText').value.trim();
       if (!msgText) return;
       
-      const messages = JSON.parse(localStorage.getItem("messages") || "[]");
-      
       const newMessage = {
-        id: Date.now(),
         sender: currentUser.username,
         text: msgText,
-        date: new Date().toLocaleString("en-GB")
+        date: new Date().toLocaleString("en-GB"),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
       };
       
-      messages.push(newMessage);
-      localStorage.setItem("messages", JSON.stringify(messages));
-      
-      const readDb = getReadMessages();
-      readDb[currentUser.username].push(newMessage.id);
-      localStorage.setItem("readMessages", JSON.stringify(readDb));
-      
-      document.getElementById('messageText').value = "";
-      loadMessages();
+      try {
+        const docRef = await db.collection("messages").add(newMessage);
+        
+        // Also add this message to the sender's "read" list
+        const { readIds } = await getReadMessages();
+        readIds.push(docRef.id);
+        await db.collection("readMessages").doc(currentUser.username).set({ readIds });
+
+        document.getElementById('messageText').value = "";
+        loadMessages();
+      } catch(e) {
+        console.error("Error sending message: ", e);
+      }
     }
     
-    function loadMessages() {
+    // [MODIFIED] Using Firebase
+    async function loadMessages() {
       const msgBox = document.getElementById('messageBox');
-      const messages = JSON.parse(localStorage.getItem("messages") || "[]");
       msgBox.innerHTML = "";
+      
+      let messages = [];
+      try {
+        const snapshot = await db.collection("messages").orderBy("timestamp", "desc").get();
+        snapshot.forEach(doc => {
+          messages.push(doc.data());
+        });
+      } catch(e) {
+        console.error("Error loading messages: ", e);
+      }
       
       if (messages.length === 0) {
         msgBox.innerHTML = '<p class="text-gray-500 text-center">No messages yet.</p>';
         return;
       }
       
-      messages.slice().reverse().forEach(msg => {
+      messages.forEach(msg => {
         const msgEl = document.createElement('div');
         msgEl.className = "border-b border-gray-200 pb-3";
         msgEl.innerHTML = `
@@ -1351,38 +1524,59 @@
     }
 
     // --- USER PANEL (SETTINGS) ---
-    function addUser(){
+    // [MODIFIED] Using Firebase
+    async function addUser(){
       const n=newUsername.value.trim(),p=newPassword.value.trim(),r=newRole.value;
       if(!n||!p)return alert("Enter details");
-      const u=JSON.parse(localStorage.getItem("users")||"[]");
-      u.push({username:n,password:p,role:r});
-      localStorage.setItem("users",JSON.stringify(u));
-      loadUsers();
-      newUsername.value=newPassword.value="";
+      try {
+        // [FIX] Check if user already exists
+        const snapshot = await db.collection("users").where("username", "==", n).get();
+        if (!snapshot.empty) {
+          return alert("❌ This username already exists!");
+        }
+        
+        await db.collection("users").add({ username: n, password: p, role: r });
+        loadUsers();
+        newUsername.value=newPassword.value="";
+      } catch (e) {
+        console.error("Error adding user: ", e);
+      }
     }
 
-    function loadUsers(){
+    // [MODIFIED] Using Firebase
+    async function loadUsers(){
       const t=userTable;t.innerHTML="";
-      const u=JSON.parse(localStorage.getItem("users")||"[]");
-      u.forEach((x,i)=>{
-        const tr=document.createElement("tr");
-        tr.className = "text-center"; 
-        tr.innerHTML=`<td class="p-2 border-t">${x.username}</td>
-                      <td class="p-2 border-t">${x.password}</td>
-                      <td class="p-2 border-t">${x.role}</td>
-                      <td class="p-2 border-t"><button onclick='delUser(${i})' class='bg-red-500 text-white px-2 py-1 rounded'>🗑️</button></td>`;
-        t.appendChild(tr);
-      });
+      try {
+        const snapshot = await db.collection("users").get();
+        snapshot.forEach(doc => {
+          const x = doc.data();
+          const tr=document.createElement("tr");
+          tr.className = "text-center"; 
+          tr.innerHTML=`<td class="p-2 border-t">${x.username}</td>
+                        <td class="p-2 border-t">${x.password}</td>
+                        <td class="p-2 border-t">${x.role}</td>
+                        <td class="p-2 border-t"><button onclick="delUser('${doc.id}')" class='bg-red-500 text-white px-2 py-1 rounded'>🗑️</button></td>`;
+          t.appendChild(tr);
+        });
+      } catch(e) {
+        console.error("Error loading users: ", e);
+      }
     }
 
-    function delUser(i){
-      const u=JSON.parse(localStorage.getItem("users")||"[]");
-      u.splice(i,1);
-      localStorage.setItem("users",JSON.stringify(u));
-      loadUsers();
+    // [MODIFIED] Using Firebase
+    async function delUser(docId){
+      if (confirm("Are you sure you want to delete this user?")) {
+        try {
+          await db.collection("users").doc(docId).delete();
+          loadUsers();
+        } catch(e) {
+          console.error("Error deleting user: ", e);
+        }
+      }
     }
     
-    function resetAllData() {
+    // [MODIFIED] Using Firebase
+    async function resetAllData() {
       const pass = document.getElementById('resetPasswordConfirm').value;
       if (!pass) {
         alert("Please enter your password to confirm.");
@@ -1393,11 +1587,13 @@
       if (currentUser.username === 'admin' && pass === '12345') {
         passwordIsCorrect = true;
       } else {
-        const users = JSON.parse(localStorage.getItem("users") || "[]");
-        const user = users.find(u => u.username === currentUser.username && u.password === pass);
-        if (user) {
-          passwordIsCorrect = true;
-        }
+        // [FIX] Check password against current user in DB
+        try {
+          const userDoc = await db.collection("users").doc(currentUser.id).get();
+          if (userDoc.exists && userDoc.data().password === pass) {
+            passwordIsCorrect = true;
+          }
+        } catch (e) { console.error("Error verifying password:", e); }
       }
 
       if (!passwordIsCorrect) {
@@ -1407,15 +1603,38 @@
 
       if (confirm("Are you sure you want to delete ALL REPORTS and MESSAGES? User accounts and permissions will NOT be deleted.")) {
         
-        localStorage.removeItem("harvestReportData");
-        localStorage.removeItem("batchActivityData");
-        localStorage.removeItem("bioMassData");
-        localStorage.removeItem("messages");
-        localStorage.removeItem("readMessages");
-        localStorage.removeItem("bioMassMean");
+        try {
+          const batch = db.batch();
+          
+          // Delete all reports
+          const reportSnapshot = await db.collection("harvestReport").get();
+          reportSnapshot.forEach(doc => batch.delete(doc.ref));
+          
+          // Delete all messages
+          const msgSnapshot = await db.collection("messages").get();
+          msgSnapshot.forEach(doc => batch.delete(doc.ref));
+          
+          // Delete all read message receipts
+          const readMsgSnapshot = await db.collection("readMessages").get();
+          readMsgSnapshot.forEach(doc => batch.delete(doc.ref));
+          
+          // Delete all batch activity
+          const batchActivitySnapshot = await db.collection("batchActivity").get();
+          batchActivitySnapshot.forEach(doc => batch.delete(doc.ref));
 
-        alert("All reports and messages have been erased. Logging out.");
-        logout();
+          // Delete other data
+          batch.delete(db.collection("settings").doc("bioMassData"));
+          batch.delete(db.collection("settings").doc("bioMassMean"));
+          
+          await batch.commit();
+
+          alert("All reports and messages have been erased. Logging out.");
+          logout();
+          
+        } catch (e) {
+          console.error("Error resetting data: ", e);
+          alert("An error occurred. Data was not reset.");
+        }
       }
     }
 

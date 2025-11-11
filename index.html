@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harvest Details Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    .hidden { display: none; }
+    
+    @media print {
+      /* Defaults to portrait */
+      
+      body * {
+        visibility: hidden;
+      }
+      .print-area, .print-area * {
+        visibility: visible;
+      }
+      .print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+      
+      /* Style the header specifically for printing */
+      #mainHeader.print-area {
+        position: absolute;
+        top: 20px;
+        left: 0;
+        width: 100%;
+        display: flex !important;
+        justify-content: center !important;
+        text-align: center;
+        box-shadow: none !important;
+        border: none !important; /* [MODIFIED] No border for header */
+        padding: 0 !important;
+      }
+      #mainHeader.print-area #loggedInUser {
+        visibility: hidden;
+      }
+      #mainHeader.print-area #companyHeaderInfo {
+        margin: 0 auto;
+      }
+      
+      /* Adjust graph position to be below the header */
+      #graph.print-area {
+        top: 100px;
+        border: 2px solid #000; /* [NEW] Add outer line box */
+        padding: 20px;
+      }
+      
+      /* [NEW] Hide graph title and buttons when printing */
+      #graph.print-area #graph-title-h2 {
+        display: none; /* Hide original "Graph" title */
+      }
+      #graph.print-area .button-container, #graph.print-area .filter-container {
+         display: none; /* Hide buttons and filter */
+      }
+      
+      /* [NEW] Show the special print title */
+      #graphPrintTitle {
+        display: block !important;
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #000;
+        visibility: visible;
+        margin-bottom: 20px;
+      }
+      /* [END NEW] */
+
+      body::after {
+        content: "Verified by (Sign/Date)";
+        position: fixed;
+        bottom: 20px;
+        right: 40px;
+        visibility: visible;
+        font-size: 12pt;
+        color: #000;
+      }
+      
+      body::before {
+        content: "Prepared by (Sign/Date)";
+        position: fixed;
+        bottom: 20px;
+        left: 40px;
+        visibility: visible;
+        font-size: 12pt;
+        color: #000;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <div id="loginPage" class="min-h-screen" style="background-image: url('hero-slider01.jpg'); background-size: cover; background-position: center;">
+    <div class="flex items-center justify-center min-h-screen w-full h-full bg-black bg-opacity-50">
+      <div class="bg-white shadow-lg rounded-lg p-8 w-96 text-center border border-green-200">
+        <img src="logo.png" alt="Logo" class="mx-auto mb-4 h-16">
+        <h1 class="text-2xl font-bold text-green-700 mb-2">GreenSignal Bio Pharma Pvt. Ltd.</h1>
+        <p class="text-sm text-gray-600 mb-6">No.49, Pappankuppam Village, Gummidipoondi, Chennai - 601201</p>
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">🔐 Login</h2>
+        <input id="username" type="text" placeholder="Username" class="border w-full mb-3 p-2 rounded focus:ring-2 focus:ring-green-500 outline-none">
+        <input id="password" type="password" placeholder="Password" class="border w-full mb-4 p-2 rounded focus:ring-2 focus:ring-green-500 outline-none">
+        <button onclick="login()" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 rounded transition">Login</button>
+        <p id="error" class="text-red-500 mt-3 hidden">❌ Invalid username or password</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboardApp" class="hidden flex h-screen">
+    <aside class="w-64 bg-green-700 text-white flex flex-col p-5 space-y-4 shadow-lg">
+      <div class="flex flex-col items-center mb-4">
+        <img src="logo.png" alt="Logo" class="h-16 mb-2 bg-white p-1 rounded">
+        <h2 class="text-lg font-bold text-center leading-tight">GreenSignal<br>Bio Pharma Pvt. Ltd.</h2>
+      </div>
+
+      <nav class="space-y-4">
+        <button id="dashboardBtn" onclick="showTab('dashboard')" class="w-full text-left px-3 py-2 rounded hover:bg-green-600">📊 Dashboard</button>
+        <button id="activityBtn" onclick="showTab('activity')" class="w-full text-left px-3 py-2 rounded hover:bg-green-600">🧪 Culture Activity</button>
+        <button id="cultureBtn" onclick="showTab('culture')" class="w-full text-left px-3 py-2 rounded hover:bg-green-600">🧫 Harvest Details</button>
+        <button id="bioBtn" onclick="showTab('bio')" class="w-full text-left px-3 py-2 rounded hover:bg-green-600">🌱 Bio Mass Trend</button>
+        <button id="graphBtn" onclick="showTab('graph')" class="w-full text-left px-3 py-2 rounded hover:bg-green-600">📈 Graph</button>
+        <button id="reportBtn" onclick="showTab('report')" class="w-full text-left px-3 py-2 rounded hover:bg-green-600">📄 Report Data</button>
+        <button id="messageBtn" onclick="showTab('message')" class="w-full text-left px-3 py-2 rounded hover:bg-green-600 relative">
+          ✉️ Message
+          <span id="messageCountBadge" class="hidden absolute right-3 top-1/2 -translate-y-1/2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">0</span>
+        </button>
+        <button id="userPanelBtn" onclick="showTab('userPanel')" class="w-full text-left px-3 py-2 rounded hover:bg-green-600">👤 User Panel</button>
+      </nav>
+
+      <div class="flex-grow"></div>
+      <button onclick="logout()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded">🚪 Logout</button>
+    </aside>
+
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <header id="mainHeader" class="bg-white shadow px-8 py-4 flex justify-between items-center">
+        <div id="companyHeaderInfo">
+          <h1 class="text-2xl font-bold text-green-700">GreenSignal Bio Pharma Pvt. Ltd.</h1>
+          <p class="text-gray-600 text-sm">No.49, Pappankuppam Village, Gummidipoondi, Chennai - 601201</p>
+        </div>
+        <div class="text-right">
+          <span id="loggedInUser" class="font-semibold text-green-700"></span>
+        </div>
+      </header>
+
+      <div class="flex-1 overflow-auto p-8">
+
+        <section id="dashboard" class="tab">
+          <h2 class="text-3xl font-bold text-green-700 mb-4">📊 Dashboard Overview</h2>
+          
+          <h3 class="text-xl font-semibold text-gray-800 mb-4 mt-6">🧪 Culture Activity Overview</h3>
+          <div class="bg-white rounded-lg shadow p-6 border border-gray-300">
+            <div class="overflow-x-auto">
+              <table class="min-w-full border border-gray-300 bg-white rounded-lg">
+                <thead class="bg-green-600 text-white">
+                  <tr>
+                    <th class="px-3 py-2">Date</th>
+                    <th class="px-3 py-2">Revival</th>
+                    <th class="px-3 py-2">P2/P3</th>
+                    <th class="px-3 py-2">P2S1/P3S1</th>
+                    <th class="px-3 py-2">P2S2/P3S2</th>
+                    <th class="px-3 py-2">Harvest</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboardActivityTable" class="text-gray-800"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="activity" class="tab hidden">
+          <h2 class="text-3xl font-bold text-green-700 mb-4">🧪 Culture Activity Details</h2>
+
+          <div class="bg-white rounded-lg shadow p-6 border border-gray-300 mb-6">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Batch ID Generator</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              <div>
+                <label for="revivalDate" class="block text-sm font-medium text-gray-700">Revival Date</label>
+                <input id="revivalDate" type="date" class="border p-2 w-full rounded focus:ring-2 focus:ring-green-500 outline-none mt-1">
+              </div>
+              <div>
+                <label for="revivalId" class="block text-sm font-medium text-gray-700">Revival ID (e.g., MSP125R101)</label>
+                <input id="revivalId" type="text" placeholder="MSP125R101" class="border p-2 w-full rounded focus:ring-2 focus:ring-green-500 outline-none mt-1 uppercase-input">
+              </div>
+
+              <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 border-t pt-4">
+                <div>
+                  <label for="p2p3" class="block text-sm font-medium text-gray-700">P2 / P3</label>
+                  <input id="p2p3" type="text" class="border p-2 w-full rounded focus:ring-2 focus:ring-green-500 outline-none mt-1 bg-yellow-50 uppercase-input">
+                </div>
+                <div>
+                  <label for="p2s1" class="block text-sm font-medium text-gray-700">P2S1 / P3S1</label>
+                  <input id="p2s1" type="text" class="border p-2 w-full rounded bg-gray-100 mt-1 uppercase-input" readonly>
+                </div>
+                <div>
+                  <label for="p2s2" class="block text-sm font-medium text-gray-700">P2S2 / P3S2</label>
+                  <input id="p2s2" type="text" class="border p-2 w-full rounded bg-gray-100 mt-1 uppercase-input" readonly>
+                </div>
+                <div>
+                  <label for="harvest" class="block text-sm font-medium text-gray-700">Harvest</label>
+                  <input id="harvest" type="text" class="border p-2 w-full rounded bg-gray-100 mt-1 uppercase-input" readonly>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-6 text-right">
+              <button onclick="saveBatch()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded transition">💾 Save Batch</button>
+            </div>
+            
+          </div>
+        </section>
+
+        <section id="culture" class="tab hidden">
+          <h2 class="text-3xl font-bold text-green-700 mb-4">🧫 Harvest Details</h2>
+          <div class="overflow-x-auto">
+            <table class="min-w-full border border-gray-300 bg-white rounded-lg shadow">
+              <thead class="bg-green-600 text-white">
+                <tr>
+                  <th class="px-3 py-2">S.No</th>
+                  <th class="px-3 py-2">Suspension No</th>
+                  <th class="px-3 py-2">A</th>
+                  <th class="px-3 py-2">B</th>
+                  <th class="px-3 py-2">A - B (Cake Weight)</th>
+                  <th class="px-3 py-2">NAg₂</th>
+                  <th class="px-3 py-2">Sign & Date</th>
+                  <th class="px-3 py-2">Start Time</th>
+                  <th class="px-3 py-2">End Time</th>
+                  <th class="px-3 py-2">Min</th>
+                  <th class="px-3 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody id="cultureTable" class="text-gray-800"></tbody>
+            </table>
+          </div>
+          <div class="mt-4 flex justify-between">
+            <button onclick="addRow()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">➕ Add Row</button>
+            <button onclick="saveData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">💾 Save & Send to Bio Mass</button>
+          </div>
+        </section>
+
+        <section id="bio" class="tab hidden">
+          <h2 class="text-3xl font-bold text-green-700 mb-4">🌱 Bio Mass Trend</h2>
+          <table class="min-w-full border border-gray-300 bg-white rounded-lg shadow">
+            <thead class="bg-green-600 text-white">
+              <tr class="text-center">
+                <th class="px-3 py-2">Suspension No</th>
+                <th class="px-3 py-2">Cake Weight</th>
+                <th class="px-3 py-2">Mean</th>
+                <th class="px-3 py-2">Lower</th>
+                <th class="px-3 py-2">Higher</th>
+              </tr>
+            </thead>
+            <tbody id="bioTable" class="text-gray-800">
+            </tbody>
+          </table>
+        </section>
+
+        <section id="graph" class="tab hidden">
+          <h2 id="graph-title-h2" class="text-3xl font-bold text-green-700 mb-4">📈 Graph</h2>
+          
+          <div class="filter-container bg-white p-4 rounded-lg shadow border border-gray-200 mb-6">
+            <label for="graphMonth" class="font-semibold text-gray-700 mr-2">Filter by Month:</label>
+            <select id="graphMonth" class="border rounded px-3 py-2">
+              <option value="">-- Select Month --</option>
+            </select>
+            <button id="viewGraphBtn" onclick="drawGraph()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded ml-2">View Graph</button>
+          </div>
+          
+          <div id="graphPrintWrapper">
+            <h3 id="graphPrintTitle" class="hidden"></h3> <canvas id="bioChart" height="120"></canvas>
+          </div>
+          
+          <div class="mt-4 space-x-2 button-container"> 
+            <button onclick="printGraph()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">🖨️ Print</button>
+            <button onclick="exportGraphPDF()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">📄 Export PDF</button>
+          </div>
+        </section>
+
+        <section id="report" class="tab hidden">
+          <h2 class="text-3xl font-bold text-green-700 mb-4">📄 Report Data</h2>
+          
+          <div class="bg-white p-4 rounded-lg shadow border border-gray-200 mb-6">
+            <label for="reportMonth" class="font-semibold text-gray-700 mr-2">Filter by Month:</label>
+            <select id="reportMonth" class="border rounded px-3 py-2">
+              <option value="">-- Select Month --</option>
+            </select>
+          </div>
+          
+          <div class="space-y-8">
+            
+            <div id="harvestReportContainer" class="bg-white rounded-lg shadow p-6 border border-gray-300">
+              <h3 class="text-xl font-semibold text-gray-800 mb-4">Harvest Activity Report</h3>
+              <div class="space-x-2 mb-4">
+                <button id="viewHarvestReport" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">View</button>
+                <button id="printHarvestReport" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">🖨️ Print</button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full border border-gray-300 bg-white rounded-lg">
+                  <thead class="bg-green-600 text-white">
+                    <tr>
+                      <th class="px-3 py-2">Suspension No</th>
+                      <th class="px-3 py-2">A</th>
+                      <th class="px-3 py-2">B</th>
+                      <th class="px-3 py-2">Cake Weight</th>
+                      <th class="px-3 py-2">NAg₂</th>
+                      <th class="px-3 py-2">Sign & Date</th>
+                      <th class="px-3 py-2">Start Time</th>
+                      <th class="px-3 py-2">End Time</th>
+                      <th class="px-3 py-2">Min</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reportTableBody" class="text-gray-800">
+                    <tr><td colspan="9" class="text-center p-4 text-gray-500">Select a month and click "View".</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div id="bioMassReportContainer" class="bg-white rounded-lg shadow p-6 border border-gray-300">
+              <h3 class="text-xl font-semibold text-gray-800 mb-4">Bio Mass Data Report</h3>
+              <div class="space-x-2 mb-4">
+                <button id="viewBioMassReport" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">View</button>
+                <button id="printBioMassReport" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">🖨️ Print</button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full border border-gray-300 bg-white rounded-lg">
+                  <thead class="bg-green-600 text-white">
+                    <tr class="text-center">
+                      <th class="px-3 py-2">Suspension No</th>
+                      <th class="px-3 py-2">Cake Weight</th>
+                      <th class="px-3 py-2">Mean</th>
+                      <th class="px-3 py-2">Lower</th>
+                      <th class="px-3 py-2">Higher</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reportBioMassTableBody" class="text-gray-800">
+                    <tr><td colspan="5" class="text-center p-4 text-gray-500">Select a month and click "View".</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </section>
+        
+        <section id="message" class="tab hidden">
+          <h2 class="text-3xl font-bold text-green-700 mb-4">✉️ Message Center</h2>
+          
+          <div id="sendMessageContainer" class="hidden bg-white p-6 rounded-lg shadow border border-gray-200 mb-6">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Send a New Message</h3>
+            <textarea id="messageText" class="border p-2 w-full rounded focus:ring-2 focus:ring-green-500 outline-none" rows="3" placeholder="Type your message here..."></textarea>
+            <button onclick="sendMessage()" class="mt-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded transition">Send Message</button>
+          </div>
+          
+          <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
+             <h3 class="text-xl font-semibold text-gray-800 mb-4">Message Box</h3>
+             <div id="messageBox" class="space-y-4 max-h-96 overflow-y-auto">
+                </div>
+          </div>
+        </section>
+
+        <section id="userPanel" class="tab hidden">
+          <h2 class="text-3xl font-bold text-green-700 mb-4">👤 User Panel</h2>
+          
+          <div class="bg-white p-6 rounded-lg shadow border border-gray-200 mb-6">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Permission Management</h3>
+            <table class="min-w-full">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-3 py-2 text-left">Role</th>
+                  <th class="px-3 py-2 text-center">Culture Activity</th>
+                  <th class="px-3 py-2 text-center">Harvest Details</th>
+                  <th class="px-3 py-2 text-center">Bio Mass Trend</th>
+                  <th class="px-3 py-2 text-center">Graph</th>
+                  <th class="px-3 py-2 text-center">Report Data</th>
+                  <th class="px-3 py-2 text-center">Message</th>
+                  <th class="px-3 py-2 text-center">User Panel</th>
+                </tr>
+              </thead>
+              <tbody id="permissionsTableBody">
+                </tbody>
+            </table>
+          </div>
+          
+          <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">User Management</h3>
+            <input id="newUsername" placeholder="Username" class="border rounded px-3 py-2 w-48">
+            <input id="newPassword" placeholder="Password" type="password" class="border rounded px-3 py-2 w-48">
+            <select id="newRole" class="border rounded px-3 py-2 w-48">
+              <option>Operator</option>
+              <option>Supervisor</option>
+              <option>SME</option>
+              <option>Manager</option>
+              <option>Admin</option>
+            </select>
+            <button onclick="addUser()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">➕ Add User</button>
+            <table class="min-w-full border border-gray-300 bg-white rounded-lg mt-4">
+              <thead class="bg-green-600 text-white">
+                <tr class="text-center">
+                  <th class="px-3 py-2">Username</th>
+                  <th class="px-3 py-2">Password</th>
+                  <th class="px-3 py-2">Role</th>
+                  <th class="px-3 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody id="userTable"></tbody>
+            </table>
+          </div>
+          
+          <div id="dangerZone" class="hidden mt-8 bg-red-50 p-6 rounded-lg shadow border border-red-300">
+            <h3 class="text-xl font-semibold text-red-800 mb-4">Danger Zone - System Reset</h3>
+            <p class="text-gray-700 mb-4">This action will permanently delete ALL **reports and messages**. User accounts and permissions will NOT be deleted.</p>
+            <div class="flex items-center space-x-2">
+              <input id="resetPasswordConfirm" type="password" placeholder="Confirm your password" class="border rounded px-3 py-2 w-64 focus:ring-2 focus:ring-red-500 outline-none">
+              <button onclick="resetAllData()" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-6 rounded transition">Reset Reports & Messages</button>
+            </div>
+          </div>
+          
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    
+    let currentUser = null;
+    let myChart = null; 
+
+    document.addEventListener("keypress", e => {
+      if (e.key === "Enter" && !document.getElementById("loginPage").classList.contains("hidden")) login();
+    });
+
+    function login() {
+      const u=username.value.trim(),p=password.value.trim();
+      const users=JSON.parse(localStorage.getItem("users")||"[]");
+      const found=users.find(x=>x.username===u && x.password===p);
+      
+      let userObject = null;
+      if (found) {
+        userObject = found;
+      } else if (u === "admin" && p === "12345") {
+        userObject = { username: "admin", role: "Admin" };
+      }
+
+      if(userObject){
+        loginPage.classList.add("hidden");
+        dashboardApp.classList.remove("hidden");
+        currentUser = userObject;
+        document.getElementById("loggedInUser").textContent = `Welcome, ${currentUser.username}`;
+        setupUIForRole(); 
+        updateMessageCount(); 
+        showTab('dashboard'); 
+      } else {
+        error.classList.remove("hidden");
+      }
+    }
+
+    function logout(){
+      showTab('dashboard'); 
+      dashboardApp.classList.add("hidden");
+      loginPage.classList.remove("hidden");
+      username.value=password.value="";
+      currentUser = null;
+      document.getElementById("loggedInUser").textContent = "";
+      
+      document.getElementById('resetPasswordConfirm').value = "";
+      
+      document.getElementById('activityBtn').style.display = 'block';
+      document.getElementById('cultureBtn').style.display = 'block';
+      document.getElementById('bioBtn').style.display = 'block';
+      document.getElementById('graphBtn').style.display = 'block';
+      document.getElementById('reportBtn').style.display = 'block';
+      document.getElementById('messageBtn').style.display = 'block';
+      document.getElementById('userPanelBtn').style.display = 'block';
+      
+      document.getElementById('messageCountBadge').classList.add('hidden');
+    }
+
+    // [NEW] Permission logic
+    function getPermissions() {
+      const defaultPerms = {
+        "Operator": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": false, "message": true, "userPanel": false },
+        "Supervisor": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": true, "message": true, "userPanel": false },
+        "SME": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": true, "message": true, "userPanel": false },
+        "Manager": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": true, "message": true, "userPanel": true },
+        "Admin": { "culture": true, "harvest": true, "bio": true, "graph": true, "report": true, "message": true, "userPanel": true }
+      };
+      const perms = JSON.parse(localStorage.getItem("appPermissions") || "null");
+      if (perms) {
+        return { 
+          ...defaultPerms, 
+          "Operator": { ...defaultPerms.Operator, ...perms.Operator },
+          "Supervisor": { ...defaultPerms.Supervisor, ...perms.Supervisor },
+          "SME": { ...defaultPerms.SME, ...perms.SME },
+          "Manager": { ...defaultPerms.Manager, ...perms.Manager },
+          "Admin": { ...defaultPerms.Admin, ...perms.Admin }
+        };
+      }
+      localStorage.setItem("appPermissions", JSON.stringify(defaultPerms));
+      return defaultPerms;
+    }
+
+    function savePermission(role, page, isAllowed) {
+      const perms = getPermissions();
+      if (perms[role]) {
+        perms[role][page] = isAllowed;
+      }
+      localStorage.setItem("appPermissions", JSON.stringify(perms));
+    }
+
+    function loadPermissions() {
+      const perms = getPermissions();
+      const tableBody = document.getElementById('permissionsTableBody');
+      tableBody.innerHTML = "";
+      
+      const rolesToDisplay = ['Operator', 'Supervisor', 'SME', 'Manager'];
+      
+      rolesToDisplay.forEach(role => {
+        const p = perms[role];
+        const tr = document.createElement('tr');
+        tr.className = "border-t";
+        tr.innerHTML = `
+          <td class="px-3 py-2 font-semibold">${role}</td>
+          <td class="px-3 py-2 text-center"><input type="checkbox" onchange="savePermission('${role}', 'culture', this.checked)" ${p.culture ? 'checked' : ''}></td>
+          <td class="px-3 py-2 text-center"><input type="checkbox" onchange="savePermission('${role}', 'harvest', this.checked)" ${p.harvest ? 'checked' : ''}></td>
+          <td class="px-3 py-2 text-center"><input type="checkbox" onchange="savePermission('${role}', 'bio', this.checked)" ${p.bio ? 'checked' : ''}></td>
+          <td class="px-3 py-2 text-center"><input type="checkbox" onchange="savePermission('${role}', 'graph', this.checked)" ${p.graph ? 'checked' : ''}></td>
+          <td class="px-3 py-2 text-center"><input type="checkbox" onchange="savePermission('${role}', 'report', this.checked)" ${p.report ? 'checked' : ''}></td>
+          <td class="px-3 py-2 text-center"><input type="checkbox" onchange="savePermission('${role}', 'message', this.checked)" ${p.message ? 'checked' : ''}></td>
+          <td class="px-3 py-2 text-center"><input type="checkbox" onchange="savePermission('${role}', 'userPanel', this.checked)" ${p.userPanel ? 'checked' : ''}></td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+    
+    function setupUIForRole() {
+      if (!currentUser) return;
+      
+      const sendMessageContainer = document.getElementById('sendMessageContainer');
+      if (['Admin', 'Manager', 'SME'].includes(currentUser.role)) {
+        sendMessageContainer.classList.remove('hidden');
+      } else {
+        sendMessageContainer.classList.add('hidden');
+      }
+      
+      const dangerZone = document.getElementById('dangerZone');
+      if (currentUser.role === 'Admin') {
+        dangerZone.classList.remove('hidden');
+      } else {
+        dangerZone.classList.add('hidden');
+      }
+
+      const perms = getPermissions()[currentUser.role];
+      if (!perms) {
+        logout();
+        return;
+      }
+
+      if (currentUser.role === 'Admin') {
+        document.getElementById('activityBtn').style.display = 'block';
+        document.getElementById('cultureBtn').style.display = 'block';
+        document.getElementById('bioBtn').style.display = 'block';
+        document.getElementById('graphBtn').style.display = 'block';
+        document.getElementById('reportBtn').style.display = 'block';
+        document.getElementById('messageBtn').style.display = 'block';
+        document.getElementById('userPanelBtn').style.display = 'block';
+        return;
+      }
+      
+      document.getElementById('activityBtn').style.display = perms.culture ? 'block' : 'none';
+      document.getElementById('cultureBtn').style.display = perms.harvest ? 'block' : 'none';
+      document.getElementById('bioBtn').style.display = perms.bio ? 'block' : 'none';
+      document.getElementById('graphBtn').style.display = perms.graph ? 'block' : 'none';
+      document.getElementById('reportBtn').style.display = perms.report ? 'block' : 'none';
+      document.getElementById('messageBtn').style.display = perms.message ? 'block' : 'none';
+      document.getElementById('userPanelBtn').style.display = perms.userPanel ? 'block' : 'none';
+    }
+
+    function showTab(id){
+      if (currentUser && currentUser.role !== 'Admin') {
+        const perms = getPermissions()[currentUser.role];
+        if (id === 'activity' && !perms.culture) return;
+        if (id === 'culture' && !perms.harvest) return;
+        if (id === 'bio' && !perms.bio) return;
+        if (id === 'graph' && !perms.graph) return;
+        if (id === 'report' && !perms.report) return;
+        if (id === 'message' && !perms.message) return;
+        if (id === 'userPanel' && !perms.userPanel) return;
+      }
+      
+      document.querySelectorAll(".tab").forEach(t=>t.classList.add("hidden"));
+      document.getElementById(id).classList.remove("hidden");
+      
+      if(id==="bio")loadBioData();
+      if(id==="userPanel") {
+        loadUsers();
+        loadPermissions(); 
+      }
+      if(id==="dashboard")loadDashboardActivity();
+      if(id==="graph") populateGraphFilter(); // [MODIFIED]
+      if(id==="report") populateReportFilter();
+      if(id==="message") {
+        loadMessages();
+        markMessagesAsRead(); 
+      }
+    }
+
+    // --- HARVEST DETAILS ---
+    function addRow(){
+      const t=cultureTable;
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td class="text-center"></td> <td><input class='border p-1 w-full uppercase-input'></td> <td><input type='number' class='border p-1 w-full' oninput='calcDiff(this)'></td> <td><input type='number' class='border p-1 w-full' oninput='calcDiff(this)'></td> <td><input class='border p-1 w-full bg-gray-100' readonly></td> <td><input class='border p-1 w-full bg-gray-100' readonly></td> <td><input class='border p-1 w-full bg-gray-100' readonly></td> <td><input type='time' class='border p-1 w-full'></td> <td><input class='border p-1 w-full bg-gray-100' readonly></td> <td><input type='number' class='border p-1 w-full' oninput='calcEndTime(this)'></td> <td class="text-center"><button onclick='deleteRow(this)' class='bg-red-500 text-white px-2 py-1 rounded'>🗑️</button></td> `;
+      t.appendChild(tr);
+      enableUppercase();
+      renumberHarvestRows();
+    }
+    
+    function deleteRow(btn) {
+      const tr = btn.closest("tr");
+      tr.remove();
+      renumberHarvestRows();
+    }
+    
+    function renumberHarvestRows() {
+      document.querySelectorAll("#cultureTable tr").forEach((row, index) => {
+        const rowNum = index + 1;
+        row.querySelector("td:first-child").textContent = rowNum;
+        const inputs = row.querySelectorAll("input");
+        inputs[1].id = `A${rowNum}`;
+        inputs[2].id = `B${rowNum}`;
+        inputs[3].id = `Diff${rowNum}`;
+        inputs[4].id = `NAg2${rowNum}`;
+        inputs[5].id = `SignDate${rowNum}`;
+        
+        const startTimeInput = inputs[6];
+        startTimeInput.id = `Start${rowNum}`;
+        
+        inputs[7].id = `End${rowNum}`;
+        inputs[8].id = `Min${rowNum}`;
+        
+        if (rowNum === 1) {
+          startTimeInput.readOnly = false;
+          startTimeInput.classList.remove("bg-gray-100");
+        } else {
+          startTimeInput.readOnly = true;
+          startTimeInput.classList.add("bg-gray-100");
+        }
+        
+        inputs[1].setAttribute('oninput', 'calcDiff(this)');
+        inputs[2].setAttribute('oninput', 'calcDiff(this)');
+        inputs[8].setAttribute('oninput', 'calcEndTime(this)');
+      });
+    }
+
+    function calcDiff(inputElement){
+      const row = inputElement.closest('tr');
+      const rowNum = row.querySelector("td:first-child").textContent;
+      const inputs = row.querySelectorAll("input");
+      const A = parseFloat(inputs[1].value) || 0;
+      const B = parseFloat(inputs[2].value) || 0;
+      const diffInput = inputs[3];
+      const nag2Input = inputs[4];
+      const signDateInput = inputs[5];
+      const startTimeInput = inputs[6]; 
+
+      const d = A - B;
+      diffInput.value = d.toFixed(2);
+      nag2Input.value = ((d * 1000) / 80).toFixed(2);
+      
+      const n = new Date();
+      
+      if (!signDateInput.value) {
+          signDateInput.value = `${currentUser.username} & ${n.toLocaleDateString("en-GB")}`;
+      }
+      
+      if (rowNum === '1' && !startTimeInput.value) { 
+          const hours = n.getHours().toString().padStart(2, '0');
+          const minutes = n.getMinutes().toString().padStart(2, '0');
+          startTimeInput.value = `${hours}:${minutes}`;
+      }
+    }
+    
+    function calcEndTime(inputElement) {
+      const row = inputElement.closest('tr');
+      const inputs = row.querySelectorAll("input");
+      const signDateInput = inputs[5];
+      const startTimeInput = inputs[6];
+      const endTimeInput = inputs[7];
+      const minVal = parseFloat(inputElement.value) || 0;
+      
+      const datePartStr = signDateInput.value.split('&')[1]?.trim();
+      const timePartStr = startTimeInput.value;
+      
+      if (!datePartStr || !timePartStr) { 
+        return; 
+      }
+      
+      try {
+        const [day, month, year] = datePartStr.split('/');
+        const [hours, minutes] = timePartStr.split(':');
+        
+        const startTime = new Date(`${year}-${month}-${day}T${hours}:${minutes}:00`);
+        if (isNaN(startTime.getTime())) return; 
+        
+        const endTime = new Date(startTime.getTime() + minVal * 60000); 
+        
+        const endHours = endTime.getHours().toString().padStart(2, '0');
+        const endMinutes = endTime.getMinutes().toString().padStart(2, '0');
+        endTimeInput.value = `${endHours}:${endMinutes}`;
+        
+        const nextRow = row.nextElementSibling;
+        if (nextRow) {
+          const nextRowInputs = nextRow.querySelectorAll("input");
+          const nextStartTimeInput = nextRowInputs[6];
+          const nextSignDateInput = nextRowInputs[5];
+
+          const nextStartTime = new Date(endTime.getTime() + 2 * 60000);
+
+          const nextHours = nextStartTime.getHours().toString().padStart(2, '0');
+          const nextMinutes = nextStartTime.getMinutes().toString().padStart(2, '0');
+          nextStartTimeInput.value = `${nextHours}:${nextMinutes}`;
+          
+          nextSignDateInput.value = `${currentUser.username} & ${nextStartTime.toLocaleDateString("en-GB")}`;
+        }
+
+      } catch (e) {
+        console.error("Error parsing date/time:", e);
+      }
+    }
+
+    // --- Uppercase Helper ---
+    function uppercaseHandler(e) {
+      e.target.value = e.target.value.toUpperCase();
+    }
+
+    function enableUppercase(){
+      document.querySelectorAll(".uppercase-input").forEach(i=>{
+        i.removeEventListener("input", uppercaseHandler);
+        i.addEventListener("input", uppercaseHandler);
+      });
+    }
+    
+    enableUppercase();
+
+    function saveData(){
+      const rows=[...document.querySelectorAll("#cultureTable tr")];
+      const harvestReport = [];
+      const bioMassPayload = [];
+      
+      rows.forEach(r => {
+        const x = r.querySelectorAll("input");
+        const suspension = x[0]?.value.toUpperCase();
+        if (!suspension) return; 
+
+        const cakeWeight = parseFloat(x[3].value) || 0;
+        
+        bioMassPayload.push({ 
+          suspension: suspension, 
+          cakeWeight: cakeWeight
+        });
+        
+        harvestReport.push({
+          suspension: suspension,
+          A: x[1]?.value,
+          B: x[2]?.value,
+          cakeWeight: cakeWeight.toFixed(2),
+          nag2: x[4]?.value,
+          signDate: x[5]?.value,
+          startTime: x[6]?.value,
+          endTime: x[7]?.value,
+          min: x[8]?.value
+        });
+      });
+      
+      if (harvestReport.length === 0) {
+        return alert("No data to save.");
+      }
+
+      const allReports = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+      const updatedReports = allReports.concat(harvestReport);
+      localStorage.setItem("harvestReportData", JSON.stringify(updatedReports));
+
+      localStorage.setItem("bioMassData", JSON.stringify(bioMassPayload));
+      
+      alert("✅ Data saved and sent to Bio Mass & Report.");
+      loadBioData(); 
+      
+      cultureTable.innerHTML = "";
+      addRow(); 
+    }
+
+    // --- BIO MASS FUNCTIONS ---
+    function loadBioData(){
+      const t=bioTable; t.innerHTML="";
+      const d=JSON.parse(localStorage.getItem("bioMassData")||"[]");
+      const savedMean = localStorage.getItem("bioMassMean") || "16.06"; 
+
+      if (d.length === 0) {
+        t.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500">No data. Add data from Harvest Details.</td></tr>`;
+        return;
+      }
+
+      d.forEach((x,i)=>{
+        const tr=document.createElement("tr");
+        tr.className = "text-center"; 
+
+        let meanCellHtml;
+        if (i === 0) {
+          meanCellHtml = `<td class="p-2 border-t">
+            <input 
+              type="number" 
+              step="0.01"
+              id="mainMeanInput" 
+              value="${savedMean}" 
+              oninput="updateMirroredMeans(this.value)" 
+              class="border p-1 w-24 text-center mx-auto"
+            >
+          </td>`;
+        } else {
+          meanCellHtml = `<td class="p-2 border-t">
+            <span class="mirrored-mean">${savedMean}</span>
+          </td>`;
+        }
+
+        tr.innerHTML=`
+          <td class="p-2 border-t">${x.suspension}</td>
+          <td class="p-2 border-t">${(x.cakeWeight || 0).toFixed(2)}</td>
+          ${meanCellHtml}
+          <td class="p-2 border-t">12</td>
+          <td class="p-2 border-t">18</td>
+        `;
+        t.appendChild(tr);
+      });
+    }
+
+    function updateMirroredMeans(value) {
+      localStorage.setItem("bioMassMean", value);
+      document.querySelectorAll(".mirrored-mean").forEach(span => {
+        span.textContent = value;
+      });
+    }
+    
+    // --- REPORT TAB FUNCTIONS ---
+    
+    function populateReportFilter() {
+      const allData = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+      const selectEl = document.getElementById('reportMonth');
+      
+      const monthSet = new Set();
+      allData.forEach(b => {
+        if (!b.signDate) return;
+        try {
+          const datePartStr = b.signDate.split('&')[1]?.trim();
+          const [day, month, year] = datePartStr.split('/');
+          const recordMonth = `${year}-${month.padStart(2, '0')}`;
+          monthSet.add(recordMonth);
+        } catch (e) { /* ignore */ }
+      });
+      
+      selectEl.innerHTML = '<option value="">-- Select Month --</option>';
+      
+      Array.from(monthSet).sort().reverse().forEach(monthYear => {
+        const [year, month] = monthYear.split('-');
+        const dateObj = new Date(year, month - 1);
+        const monthName = dateObj.toLocaleString('default', { month: 'long' });
+        const label = `${monthName} ${year}`;
+        
+        const option = new Option(label, monthYear);
+        selectEl.add(option);
+      });
+    }
+
+    function getFilteredReportData() {
+      const selectedMonth = document.getElementById('reportMonth').value;
+      if (!selectedMonth) {
+        alert("Please select a month to filter.");
+        return null;
+      }
+      
+      const allData = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+      
+      const filteredData = allData.filter(b => {
+        if (!b.signDate) return false;
+        try {
+          const datePartStr = b.signDate.split('&')[1]?.trim();
+          const [day, month, year] = datePartStr.split('/');
+          const recordMonth = `${year}-${month.padStart(2, '0')}`;
+          return recordMonth === selectedMonth;
+        } catch (e) {
+          return false;
+        }
+      });
+      
+      return filteredData;
+    }
+    
+    function loadReportData() {
+      const t = document.getElementById('reportTableBody');
+      const data = getFilteredReportData();
+      
+      if (data === null) return;
+      t.innerHTML = ""; 
+
+      if (data.length === 0) {
+        t.innerHTML = `<tr><td colspan="9" class="text-center p-4 text-gray-500">No harvest data found for this month.</td></tr>`;
+        return;
+      }
+
+      data.forEach(b => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-gray-50 text-center";
+        tr.innerHTML = `
+          <td class="border-t px-3 py-2">${b.suspension}</td>
+          <td class="border-t px-3 py-2">${b.A}</td>
+          <td class="border-t px-3 py-2">${b.B}</td>
+          <td class="border-t px-3 py-2">${b.cakeWeight}</td>
+          <td class="border-t px-3 py-2">${b.nag2}</td>
+          <td class="border-t px-3 py-2">${b.signDate}</td>
+          <td class="border-t px-3 py-2">${b.startTime}</td>
+          <td class="border-t px-3 py-2">${b.endTime}</td>
+          <td class="border-t px-3 py-2">${b.min}</td>
+        `;
+        t.appendChild(tr);
+      });
+    }
+    
+    function loadBioMassReportData() {
+      const t = document.getElementById('reportBioMassTableBody');
+      const data = getFilteredReportData();
+      
+      if (data === null) return;
+      t.innerHTML = "";
+      
+      const savedMean = localStorage.getItem("bioMassMean") || "16.06"; 
+
+      if (data.length === 0) {
+        t.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500">No bio mass data found for this month.</td></tr>`;
+        return;
+      }
+
+      data.forEach((x,i)=>{
+        const tr=document.createElement("tr");
+        tr.className = "text-center"; 
+
+        let meanCellHtml;
+        if (i === 0) {
+          meanCellHtml = `<td class="p-2 border-t">
+            <input 
+              type="number" 
+              step="0.01"
+              value="${savedMean}" 
+              oninput="updateMirroredMeans(this.value)" 
+              class="border p-1 w-24 text-center mx-auto main-mean-report"
+            >
+          </td>`;
+        } else {
+          meanCellHtml = `<td class="p-2 border-t">
+            <span class="mirrored-mean-report">${savedMean}</span>
+          </td>`;
+        }
+
+        tr.innerHTML=`
+          <td class="p-2 border-t">${x.suspension}</td>
+          <td class="p-2 border-t">${x.cakeWeight}</td>
+          ${meanCellHtml}
+          <td class="p-2 border-t">12</td>
+          <td class="p-2 border-t">18</td>
+        `;
+        t.appendChild(tr);
+      });
+      
+      document.querySelector('.main-mean-report')?.addEventListener('input', (e) => {
+        document.querySelectorAll(".mirrored-mean-report").forEach(span => {
+          span.textContent = e.target.value;
+        });
+      });
+    }
+    
+    function printSection(containerId) {
+      document.querySelectorAll('.print-area').forEach(el => el.classList.remove('print-area'));
+      document.getElementById(containerId).classList.add('print-area');
+      window.print();
+    }
+    
+    document.getElementById('viewHarvestReport').onclick = loadReportData;
+    document.getElementById('viewBioMassReport').onclick = loadBioMassReportData;
+    document.getElementById('printHarvestReport').onclick = () => printSection('harvestReportContainer');
+    document.getElementById('printBioMassReport').onclick = () => printSection('bioMassReportContainer');
+
+
+    // --- DASHBOARD OVERVIEW FUNCTIONS ---
+    function saveBatch() {
+      const batchData = {
+        date: document.getElementById('revivalDate').value,
+        revival: document.getElementById('revivalId').value.toUpperCase(),
+        p2p3: document.getElementById('p2p3').value.toUpperCase(),
+        p2s1: document.getElementById('p2s1').value.toUpperCase(),
+        p2s2: document.getElementById('p2s2').value.toUpperCase(),
+        harvest: document.getElementById('harvest').value.toUpperCase()
+      };
+
+      if (!batchData.date || !batchData.revival) {
+        return alert("❌ Please enter at least a Revival Date and Revival ID.");
+      }
+      
+      const allBatches = JSON.parse(localStorage.getItem("batchActivityData") || "[]");
+      allBatches.push(batchData);
+      localStorage.setItem("batchActivityData", JSON.stringify(allBatches));
+
+      alert("✅ Batch saved successfully!");
+
+      document.getElementById('revivalDate').value = '';
+      document.getElementById('revivalId').value = '';
+      handleRevivalIdChange({ target: { value: '' } }); 
+
+      loadDashboardActivity();
+    }
+
+    function loadDashboardActivity() {
+      const t = document.getElementById('dashboardActivityTable');
+      if (!t) return; 
+      t.innerHTML = "";
+      const data = JSON.parse(localStorage.getItem("batchActivityData") || "[]");
+
+      if (data.length === 0) {
+        t.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-gray-500">No batch activity saved yet.</td></tr>`;
+        return;
+      }
+
+      data.forEach(b => {
+        let displayDate = b.date;
+        if (b.date) {
+          try {
+            const parts = b.date.split('-');
+            displayDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          } catch (e) {
+             displayDate = b.date;
+          }
+        }
+      
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-gray-50";
+        tr.innerHTML = `
+          <td class="border-t px-3 py-2">${displayDate}</td>
+          <td class="border-t px-3 py-2">${b.revival}</td>
+          <td class="border-t px-3 py-2">${b.p2p3}</td>
+          <td class="border-t px-3 py-2">${b.p2s1}</td>
+          <td class="border-t px-3 py-2">${b.p2s2}</td>
+          <td class="border-t px-3 py-2">${b.harvest}</td>
+        `;
+        t.appendChild(tr);
+      });
+    }
+
+    // --- BATCH ID GENERATOR FUNCTIONS ---
+    function handleRevivalIdChange(e) {
+        const revivalId = e.target.value.toUpperCase();
+        const p2p3El = document.getElementById('p2p3');
+
+        if (revivalId.length < 4) { 
+            clearGeneratedFields();
+            return;
+        }
+        const prefix = revivalId.substring(0, 3);
+        const suffix = revivalId.substring(3);
+        const p2p3Val = prefix + suffix.replace('1', '2'); 
+        p2p3El.value = p2p3Val;
+        handleP2P3Change({ target: { value: p2p3Val } });
+    }
+
+    function handleP2P3Change(e) {
+        const p2p3Val = e.target.value.toUpperCase();
+        const revivalIdVal = document.getElementById('revivalId').value.toUpperCase(); 
+
+        const p2s1El = document.getElementById('p2s1');
+        const p2s2El = document.getElementById('p2s2');
+        const harvestEl = document.getElementById('harvest');
+
+        if (p2p3Val.length < 4 || revivalIdVal.length < 4) {
+            p2s1El.value = ''; p2s2El.value = ''; harvestEl.value = '';
+            return;
+        }
+
+        const pNum = p2p3Val.charAt(3); 
+        const revivalSuffix = revivalIdVal.substring(3); 
+        const p2p3Suffix = p2p3Val.substring(3); 
+        const p2p3SuffixNoFirst = p2p3Val.substring(4);
+
+        p2s1El.value = 'P' + pNum + 'S' + revivalSuffix;
+        p2s2El.value = 'P' + pNum + 'S2' + p2p3SuffixNoFirst;
+        harvestEl.value = 'HTP' + p2p3Suffix;
+    }
+
+    // [REMOVED] handleDateChange function
+
+    function clearGeneratedFields() {
+        document.getElementById('p2p3').value = '';
+        handleP2P3Change({ target: { value: '' } });
+    }
+    
+    document.getElementById('revivalId').addEventListener('input', handleRevivalIdChange);
+    document.getElementById('p2p3').addEventListener('input', handleP2P3Change);
+    // [REMOVED] revivalDate event listener
+    
+
+    // --- [MODIFIED] GRAPH ---
+    
+    // [NEW] Populates the graph month filter dropdown
+    function populateGraphFilter() {
+      const allData = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+      const selectEl = document.getElementById('graphMonth');
+      
+      const monthSet = new Set();
+      allData.forEach(b => {
+        if (!b.signDate) return;
+        try {
+          const datePartStr = b.signDate.split('&')[1]?.trim();
+          const [day, month, year] = datePartStr.split('/');
+          const recordMonth = `${year}-${month.padStart(2, '0')}`;
+          monthSet.add(recordMonth);
+        } catch (e) { /* ignore */ }
+      });
+      
+      selectEl.innerHTML = '<option value="">-- Select Month --</option>';
+      
+      Array.from(monthSet).sort().reverse().forEach(monthYear => {
+        const [year, month] = monthYear.split('-');
+        const dateObj = new Date(year, month - 1);
+        const monthName = dateObj.toLocaleString('default', { month: 'long' });
+        const label = `${monthName} ${year}`;
+        
+        const option = new Option(label, monthYear);
+        selectEl.add(option);
+      });
+    }
+    
+    function drawGraph(){
+      const ctx=bioChart;
+      if (myChart) {
+        myChart.destroy();
+      }
+      
+      // [NEW] Filter data based on selected month
+      const selectedMonth = document.getElementById('graphMonth').value;
+      if (!selectedMonth) {
+        alert("Please select a month to view the graph.");
+        return;
+      }
+      
+      const allData = JSON.parse(localStorage.getItem("harvestReportData") || "[]");
+      const filteredData = allData.filter(b => {
+        if (!b.signDate) return false;
+        try {
+          const datePartStr = b.signDate.split('&')[1]?.trim();
+          const [day, month, year] = datePartStr.split('/');
+          const recordMonth = `${year}-${month.padStart(2, '0')}`;
+          return recordMonth === selectedMonth;
+        } catch (e) {
+          return false;
+        }
+      });
+      
+      if(!filteredData.length) {
+        ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
+        alert("No Bio Mass data available for this month!");
+        return;
+      }
+      
+      // [NEW] Set print title
+      const selectEl = document.getElementById('graphMonth');
+      const selectedMonthText = selectEl.options[selectEl.selectedIndex].text;
+      document.getElementById('graphPrintTitle').textContent = `Bio Mass Trend - ${selectedMonthText}`;
+
+      const savedMean = parseFloat(localStorage.getItem("bioMassMean") || "16.06"); 
+      
+      const lbl=filteredData.map(x=>x.suspension),
+            cw=filteredData.map(x=>x.cakeWeight),
+            m=Array(filteredData.length).fill(savedMean), 
+            low=Array(filteredData.length).fill(12),
+            high=Array(filteredData.length).fill(18);
+            
+      myChart = new Chart(ctx,{type:"line",data:{labels:lbl,datasets:[{label:"Cake Weight",data:cw,borderColor:"blue",fill:false},{label:"Mean",data:m,borderColor:"green",borderDash:[5,5],fill:false},{label:"Lower",data:low,borderColor:"orange",borderDash:[4,4],fill:false},{label:"Higher",data:high,borderColor:"red",borderDash:[4,4],fill:false}]},
+      options:{
+        responsive:true,
+        scales:{
+          y:{
+            beginAtZero:true,
+            title: { // [NEW] Y-Axis label
+              display: true,
+              text: 'Cake Weight',
+              font: { size: 16 }
+            }
+          }
+        }
+      }});
+    }
+    
+    function printGraph() {
+      // Add print-area class to header and graph wrapper
+      document.querySelectorAll('.print-area').forEach(el => el.classList.remove('print-area'));
+      document.getElementById('mainHeader').classList.add('print-area');
+      document.getElementById('graph').classList.add('print-area');
+      window.print();
+    }
+    
+    async function exportGraphPDF() {
+      const { jsPDF } = window.jspdf;
+      const graphSection = document.getElementById("graph");
+      
+      // [NEW] Temporarily show/hide elements for PDF capture
+      const header = document.getElementById('mainHeader');
+      const graphTitle = document.getElementById('graphPrintTitle');
+      const filterContainer = graphSection.querySelector('.filter-container');
+      const buttonContainer = graphSection.querySelector('.button-container');
+
+      // 1. Prepare for capture
+      header.classList.add('print-area'); // Show header
+      graphTitle.classList.remove('hidden'); // Show print title
+      filterContainer.classList.add('hidden'); // Hide filter
+      buttonContainer.classList.add('hidden'); // Hide buttons
+      graphSection.classList.add('border-2', 'border-black', 'p-5'); // Add border
+      
+      // 2. Capture canvas
+      const canvas = await html2canvas(graphSection, { 
+        onclone: (doc) => {
+          // Ensure the print-only title is visible in the clone
+          const cloneTitle = doc.getElementById('graphPrintTitle');
+          if (cloneTitle) {
+            cloneTitle.style.display = 'block';
+          }
+        }
+      });
+      
+      // 3. Clean up UI
+      header.classList.remove('print-area');
+      graphTitle.classList.add('hidden');
+      filterContainer.classList.remove('hidden');
+      buttonContainer.classList.remove('hidden');
+      graphSection.classList.remove('border-2', 'border-black', 'p-5');
+      
+      // 4. Generate PDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' for landscape
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save("graph-report.pdf");
+    }
+    
+    // --- MESSAGE FUNCTIONS ---
+    
+    function getReadMessages() {
+      const readDb = JSON.parse(localStorage.getItem("readMessages") || "{}");
+      if (!currentUser) return {};
+      if (!readDb[currentUser.username]) {
+        readDb[currentUser.username] = [];
+      }
+      return readDb;
+    }
+    
+    function updateMessageCount() {
+      if (!currentUser) return;
+      const allMessages = JSON.parse(localStorage.getItem("messages") || "[]");
+      const readDb = getReadMessages();
+      const readIds = readDb[currentUser.username] || [];
+      
+      let newMessagesCount = 0;
+      allMessages.forEach(msg => {
+        if (!readIds.includes(msg.id) && msg.sender !== currentUser.username) {
+          newMessagesCount++;
+        }
+      });
+      
+      const badge = document.getElementById('messageCountBadge');
+      if (newMessagesCount > 0) {
+        badge.textContent = newMessagesCount;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+    
+    function markMessagesAsRead() {
+      if (!currentUser) return;
+      const allMessages = JSON.parse(localStorage.getItem("messages") || "[]");
+      const readDb = getReadMessages();
+      
+      readDb[currentUser.username] = allMessages.map(msg => msg.id);
+      localStorage.setItem("readMessages", JSON.stringify(readDb));
+      
+      updateMessageCount();
+    }
+
+    function sendMessage() {
+      const msgText = document.getElementById('messageText').value.trim();
+      if (!msgText) return;
+      
+      const messages = JSON.parse(localStorage.getItem("messages") || "[]");
+      
+      const newMessage = {
+        id: Date.now(),
+        sender: currentUser.username,
+        text: msgText,
+        date: new Date().toLocaleString("en-GB")
+      };
+      
+      messages.push(newMessage);
+      localStorage.setItem("messages", JSON.stringify(messages));
+      
+      const readDb = getReadMessages();
+      readDb[currentUser.username].push(newMessage.id);
+      localStorage.setItem("readMessages", JSON.stringify(readDb));
+      
+      document.getElementById('messageText').value = "";
+      loadMessages();
+    }
+    
+    function loadMessages() {
+      const msgBox = document.getElementById('messageBox');
+      const messages = JSON.parse(localStorage.getItem("messages") || "[]");
+      msgBox.innerHTML = "";
+      
+      if (messages.length === 0) {
+        msgBox.innerHTML = '<p class="text-gray-500 text-center">No messages yet.</p>';
+        return;
+      }
+      
+      messages.slice().reverse().forEach(msg => {
+        const msgEl = document.createElement('div');
+        msgEl.className = "border-b border-gray-200 pb-3";
+        msgEl.innerHTML = `
+          <div class="flex justify-between items-center mb-1">
+            <strong class="text-green-700">From: ${msg.sender}</strong>
+            <span class="text-xs text-gray-500">${msg.date}</span>
+          </div>
+          <p class="text-gray-800 whitespace-pre-wrap">${msg.text}</p>
+        `;
+        msgBox.appendChild(msgEl);
+      });
+    }
+
+    // --- USER PANEL (SETTINGS) ---
+    function addUser(){
+      const n=newUsername.value.trim(),p=newPassword.value.trim(),r=newRole.value;
+      if(!n||!p)return alert("Enter details");
+      const u=JSON.parse(localStorage.getItem("users")||"[]");
+      u.push({username:n,password:p,role:r});
+      localStorage.setItem("users",JSON.stringify(u));
+      loadUsers();
+      newUsername.value=newPassword.value="";
+    }
+
+    function loadUsers(){
+      const t=userTable;t.innerHTML="";
+      const u=JSON.parse(localStorage.getItem("users")||"[]");
+      u.forEach((x,i)=>{
+        const tr=document.createElement("tr");
+        tr.className = "text-center"; 
+        tr.innerHTML=`<td class="p-2 border-t">${x.username}</td>
+                      <td class="p-2 border-t">${x.password}</td>
+                      <td class="p-2 border-t">${x.role}</td>
+                      <td class="p-2 border-t"><button onclick='delUser(${i})' class='bg-red-500 text-white px-2 py-1 rounded'>🗑️</button></td>`;
+        t.appendChild(tr);
+      });
+    }
+
+    function delUser(i){
+      const u=JSON.parse(localStorage.getItem("users")||"[]");
+      u.splice(i,1);
+      localStorage.setItem("users",JSON.stringify(u));
+      loadUsers();
+    }
+    
+    function resetAllData() {
+      const pass = document.getElementById('resetPasswordConfirm').value;
+      if (!pass) {
+        alert("Please enter your password to confirm.");
+        return;
+      }
+
+      let passwordIsCorrect = false;
+      if (currentUser.username === 'admin' && pass === '12345') {
+        passwordIsCorrect = true;
+      } else {
+        const users = JSON.parse(localStorage.getItem("users") || "[]");
+        const user = users.find(u => u.username === currentUser.username && u.password === pass);
+        if (user) {
+          passwordIsCorrect = true;
+        }
+      }
+
+      if (!passwordIsCorrect) {
+        alert("❌ Incorrect password!");
+        return;
+      }
+
+      if (confirm("Are you sure you want to delete ALL REPORTS and MESSAGES? User accounts and permissions will NOT be deleted.")) {
+        
+        localStorage.removeItem("harvestReportData");
+        localStorage.removeItem("batchActivityData");
+        localStorage.removeItem("bioMassData");
+        localStorage.removeItem("messages");
+        localStorage.removeItem("readMessages");
+        localStorage.removeItem("bioMassMean");
+
+        alert("All reports and messages have been erased. Logging out.");
+        logout();
+      }
+    }
+
+  </script>
+</body>
+</html>

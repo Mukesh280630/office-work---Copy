@@ -3,13 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login page mukesh</title>
+  <title>Harvest Details Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
   <style>
     .hidden { display: none; }
@@ -40,7 +43,7 @@
         justify-content: center !important;
         text-align: center;
         box-shadow: none !important;
-        border: none !important; /* [MODIFIED] No border for header */
+        border: none !important;
         padding: 0 !important;
       }
       #mainHeader.print-area #loggedInUser {
@@ -53,19 +56,19 @@
       /* Adjust graph position to be below the header */
       #graph.print-area {
         top: 100px;
-        border: 2px solid #000; /* [NEW] Add outer line box */
+        border: 2px solid #000;
         padding: 20px;
       }
       
-      /* [NEW] Hide graph title and buttons when printing */
+      /* Hide graph title and buttons when printing */
       #graph.print-area #graph-title-h2 {
-        display: none; /* Hide original "Graph" title */
+        display: none;
       }
       #graph.print-area .button-container, #graph.print-area .filter-container {
-         display: none; /* Hide buttons and filter */
+         display: none;
       }
       
-      /* [NEW] Show the special print title */
+      /* Show the special print title */
       #graphPrintTitle {
         display: block !important;
         text-align: center;
@@ -75,7 +78,6 @@
         visibility: visible;
         margin-bottom: 20px;
       }
-      /* [END NEW] */
 
       body::after {
         content: "Verified by (Sign/Date)";
@@ -106,7 +108,8 @@
       <div class="bg-white shadow-lg rounded-lg p-8 w-96 text-center border border-green-200">
         <img src="logo.png" alt="Logo" class="mx-auto mb-4 h-16">
         <h1 class="text-2xl font-bold text-green-700 mb-2">GreenSignal Bio Pharma Pvt. Ltd.</h1>
-        <h2 class="text-xl font-semibold text-gray-700 mb-4">🔐 User Login</h2>
+        <p class="text-sm text-gray-600 mb-6">No.49, Pappankuppam Village, Gummidipoondi, Chennai - 601201</p>
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">🔐 Login</h2>
         <input id="username" type="text" placeholder="Username" class="border w-full mb-3 p-2 rounded focus:ring-2 focus:ring-green-500 outline-none">
         <input id="password" type="password" placeholder="Password" class="border w-full mb-4 p-2 rounded focus:ring-2 focus:ring-green-500 outline-none">
         <button onclick="login()" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 rounded transition">Login</button>
@@ -430,19 +433,19 @@
     </main>
   </div>
 
- <script>
+<script>
     lucide.createIcons();
     
     // --- [NEW] FIREBASE SETUP ---
     // 1. Paste your Firebase config object here
-   const firebaseConfig = {
-  apiKey: "AIzaSyCkI2phBxL6sQ6Fh7rHaGeWJmM_d6PtEl4",
-  authDomain: "work-file-fae08.firebaseapp.com",
-  projectId: "work-file-fae08",
-  storageBucket: "work-file-fae08.firebasestorage.app",
-  messagingSenderId: "148141344645",
-  appId: "1:148141344645:web:ea99f1273ac306daf866ec"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyCkI2phBxL6sQ6Fh7rHaGeWJmM_d6PtEl4",
+      authDomain: "work-file-fae08.firebaseapp.com",
+      projectId: "work-file-fae08",
+      storageBucket: "work-file-fae08.firebasestorage.app",
+      messagingSenderId: "148141344645",
+      appId: "1:148141344645:web:66ba410c6499cc62f866ec"
+    };
 
     // 2. Initialize Firebase
     firebase.initializeApp(firebaseConfig);
@@ -1341,7 +1344,7 @@
             beginAtZero:true,
             title: {
               display: true,
-              text: 'Cake Weight',
+              text: 'Cake. Weight',
               font: { size: 16 }
             }
           }
@@ -1543,7 +1546,7 @@
       }
     }
 
-    // [MODIFIED] Using Firebase
+    // [MODIFIED] Using Firebase and added text-center
     async function loadUsers(){
       const t=userTable;t.innerHTML="";
       try {
@@ -1551,7 +1554,7 @@
         snapshot.forEach(doc => {
           const x = doc.data();
           const tr=document.createElement("tr");
-          tr.className = "text-center"; 
+          tr.className = "text-center"; // Center text
           tr.innerHTML=`<td class="p-2 border-t">${x.username}</td>
                         <td class="p-2 border-t">${x.password}</td>
                         <td class="p-2 border-t">${x.role}</td>
